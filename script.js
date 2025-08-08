@@ -1,16 +1,13 @@
 // Security Configuration
 const SECURITY_CONFIG = {
-    validTokens: ["TOKEN-123", "TOKEN-456", "TOKEN-789"],
     lootlabsUrl: "https://lootdest.org/s?UrSxQK6R",
     robloxEventUrl: "https://www.roblox.com/games/123456789/Event-Game",
     discordUrl: "https://discord.gg/dyGvnnymbHj",
-    maxAttempts: 3,
     sessionTimeout: 86400000 // 24 hours
 };
 
 // Security State
 let securityState = {
-    attempts: 0,
     sessionId: generateSessionId(),
     userAgent: navigator.userAgent,
     timestamp: new Date().toISOString()
@@ -23,16 +20,11 @@ document.addEventListener('DOMContentLoaded', function() {
     updateTimestamps();
 });
 
-// MINIMAL Security Functions - ONLY what you asked for
+// MINIMAL Security Functions
 function initializeSecurity() {
     // ONLY block right-click and DevTools shortcuts
     document.addEventListener('contextmenu', e => e.preventDefault());
     document.addEventListener('keydown', handleKeyDown);
-    
-    // ONLY check referrer on redirect page (for ad bypass prevention)
-    if (window.location.pathname.includes('redirect.html')) {
-        validateReferrer();
-    }
     
     validateSession();
 }
@@ -45,32 +37,6 @@ function handleKeyDown(e) {
         (e.ctrlKey && e.key === 'u')) {
         e.preventDefault();
         return false;
-    }
-}
-
-function validateReferrer() {
-    // ONLY for preventing ad bypass
-    const validReferrers = [
-        'https://lootlabs.net',
-        'https://lootdest.org',
-        window.location.origin
-    ];
-    
-    const referrer = document.referrer;
-    if (!referrer) {
-        return; // Don't redirect for no referrer
-    }
-    
-    let isValidReferrer = false;
-    for (let validRef of validReferrers) {
-        if (referrer.startsWith(validRef)) {
-            isValidReferrer = true;
-            break;
-        }
-    }
-    
-    if (!isValidReferrer) {
-        redirectToBypass('Invalid referrer detected');
     }
 }
 
@@ -155,31 +121,14 @@ function initializeIndexPage() {
     }
 }
 
-// Redirect Page Logic
+// Redirect Page Logic - COMPLETELY CHANGED
 function initializeRedirectPage() {
-    const tokenInput = document.getElementById('accessToken');
-    const validateBtn = document.getElementById('validateToken');
     const eventBtn = document.getElementById('eventButton');
     
-    if (tokenInput && validateBtn) {
-        validateBtn.addEventListener('click', function() {
-            validateAccessToken();
-        });
-        
-        tokenInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                validateAccessToken();
-            }
-        });
-        
-        tokenInput.addEventListener('input', function() {
-            // Clear any error states when user starts typing
-            const errorSection = document.getElementById('errorSection');
-            if (errorSection && !errorSection.classList.contains('hidden')) {
-                errorSection.classList.add('hidden');
-            }
-        });
-    }
+    // Auto-check if user came from LootLabs
+    setTimeout(() => {
+        checkLootLabsCompletion();
+    }, 1000);
     
     if (eventBtn) {
         eventBtn.addEventListener('click', function() {
@@ -194,76 +143,87 @@ function initializeRedirectPage() {
             }
         });
     }
-    
-    // Auto-focus token input
-    if (tokenInput) {
-        setTimeout(() => tokenInput.focus(), 500);
-    }
-    
-    checkExistingSession();
 }
 
-function validateAccessToken() {
-    const tokenInput = document.getElementById('accessToken');
-    const token = tokenInput.value.trim().toUpperCase();
+function checkLootLabsCompletion() {
+    const referrer = document.referrer;
+    const sessionData = localStorage.getItem('eventSession');
     
-    if (!token) {
-        showError('Please enter an access token');
+    // Check if they have a valid session first
+    if (!sessionData) {
+        redirectToBypass('No verification session found');
         return;
     }
     
-    // Check attempts
-    securityState.attempts++;
-    if (securityState.attempts > SECURITY_CONFIG.maxAttempts) {
-        redirectToBypass('Too many failed attempts');
-        return;
-    }
-    
-    showLoadingState();
-    
-    setTimeout(() => {
-        if (isValidToken(token)) {
-            showSuccess(token);
-        } else {
-            showError('Invalid token. Please check your token and try again.');
-            
-            if (securityState.attempts >= SECURITY_CONFIG.maxAttempts) {
-                setTimeout(() => {
-                    redirectToBypass('Maximum attempts exceeded');
-                }, 2000);
+    // Check if they came from LootLabs/LootDest
+    if (referrer && (referrer.includes('lootdest.org') || referrer.includes('lootlabs.net'))) {
+        // They completed the verification!
+        showVerificationSuccess();
+    } else {
+        // They have a session but didn't come from LootLabs
+        // Check if they already completed verification
+        try {
+            const session = JSON.parse(sessionData);
+            if (session.validated && Date.now() - session.validatedAt < SECURITY_CONFIG.sessionTimeout) {
+                showVerificationSuccess();
+            } else {
+                showWaitingForVerification();
             }
+        } catch (e) {
+            redirectToBypass('Invalid session data');
         }
-    }, 2000);
+    }
 }
 
-function isValidToken(token) {
-    return SECURITY_CONFIG.validTokens.includes(token);
-}
-
-function showLoadingState() {
+function showWaitingForVerification() {
     const title = document.getElementById('verificationTitle');
     const spinner = document.getElementById('loadingSpinner');
     const statusText = document.getElementById('statusText');
     const tokenSection = document.getElementById('tokenInput');
-    const validateBtn = document.getElementById('validateToken');
+    const successSection = document.getElementById('successSection');
+    const errorSection = document.getElementById('errorSection');
     
-    if (title) title.textContent = 'Validating Access Token...';
+    if (title) title.textContent = 'Waiting for Verification...';
     if (spinner) spinner.classList.remove('hidden');
-    if (statusText) statusText.textContent = 'Verifying...';
-    if (tokenSection) tokenSection.style.opacity = '0.5';
-    if (validateBtn) {
-        validateBtn.disabled = true;
-        validateBtn.innerHTML = '<span>Validating...</span>';
-    }
+    if (statusText) statusText.textContent = 'Complete the verification in the other tab, then return here.';
+    if (tokenSection) tokenSection.classList.add('hidden'); // Hide token input
+    if (successSection) successSection.classList.add('hidden');
+    if (errorSection) errorSection.classList.add('hidden');
+    
+    // Check every 3 seconds if they completed verification
+    let checkCount = 0;
+    const maxChecks = 60; // Check for 3 minutes max
+    
+    const checkInterval = setInterval(() => {
+        checkCount++;
+        
+        // If they've been waiting too long, send to bypass
+        if (checkCount >= maxChecks) {
+            clearInterval(checkInterval);
+            redirectToBypass('Verification timeout - please try again');
+            return;
+        }
+        
+        // Check if page was refreshed and they now have the right referrer
+        const currentReferrer = document.referrer;
+        if (currentReferrer && (currentReferrer.includes('lootdest.org') || currentReferrer.includes('lootlabs.net'))) {
+            clearInterval(checkInterval);
+            showVerificationSuccess();
+        }
+    }, 3000);
 }
 
-function showSuccess(token) {
+function showVerificationSuccess() {
     const tokenSection = document.getElementById('tokenInput');
     const successSection = document.getElementById('successSection');
     const errorSection = document.getElementById('errorSection');
     const eventBtn = document.getElementById('eventButton');
     const expiryTime = document.getElementById('expiryTime');
+    const spinner = document.getElementById('loadingSpinner');
+    const title = document.getElementById('verificationTitle');
     
+    if (title) title.textContent = 'Verification Complete!';
+    if (spinner) spinner.classList.add('hidden');
     if (tokenSection) tokenSection.classList.add('hidden');
     if (errorSection) errorSection.classList.add('hidden');
     if (successSection) successSection.classList.remove('hidden');
@@ -280,69 +240,14 @@ function showSuccess(token) {
     // Store successful validation
     const sessionData = JSON.parse(localStorage.getItem('eventSession') || '{}');
     sessionData.validated = true;
-    sessionData.token = hashToken(token);
     sessionData.validatedAt = Date.now();
+    sessionData.completedVia = 'lootlabs';
     localStorage.setItem('eventSession', JSON.stringify(sessionData));
     
     // Add success animation
-    successSection.style.animation = 'successSlide 0.8s cubic-bezier(0.4, 0, 0.2, 1)';
-}
-
-function showError(message) {
-    const tokenSection = document.getElementById('tokenInput');
-    const successSection = document.getElementById('successSection');
-    const errorSection = document.getElementById('errorSection');
-    const errorMessage = document.getElementById('errorMessage');
-    const retryBtn = document.getElementById('retryButton');
-    const spinner = document.getElementById('loadingSpinner');
-    const statusText = document.getElementById('statusText');
-    const validateBtn = document.getElementById('validateToken');
-    
-    if (tokenSection) tokenSection.style.opacity = '1';
-    if (successSection) successSection.classList.add('hidden');
-    if (errorSection) errorSection.classList.remove('hidden');
-    if (errorMessage) errorMessage.textContent = message;
-    if (spinner) spinner.classList.add('hidden');
-    if (statusText) statusText.textContent = 'Ready';
-    if (validateBtn) {
-        validateBtn.disabled = false;
-        validateBtn.innerHTML = '<span>Validate Token</span>';
+    if (successSection) {
+        successSection.style.animation = 'successSlide 0.8s cubic-bezier(0.4, 0, 0.2, 1)';
     }
-    
-    if (retryBtn) {
-        retryBtn.addEventListener('click', function() {
-            if (errorSection) errorSection.classList.add('hidden');
-            document.getElementById('accessToken').value = '';
-            document.getElementById('accessToken').focus();
-        });
-    }
-}
-
-function checkExistingSession() {
-    const sessionData = localStorage.getItem('eventSession');
-    if (sessionData) {
-        try {
-            const session = JSON.parse(sessionData);
-            if (session.validated && 
-                Date.now() - session.validatedAt < SECURITY_CONFIG.sessionTimeout) {
-                setTimeout(() => {
-                    showSuccess('EXISTING-SESSION');
-                }, 1000);
-            }
-        } catch (e) {
-            localStorage.removeItem('eventSession');
-        }
-    }
-}
-
-function hashToken(token) {
-    let hash = 0;
-    for (let i = 0; i < token.length; i++) {
-        const char = token.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash = hash & hash;
-    }
-    return hash.toString(36);
 }
 
 // Bypass Page Logic
@@ -352,7 +257,6 @@ function initializeBypassPage() {
     
     if (goHomeBtn) {
         goHomeBtn.addEventListener('click', function() {
-            // Add click animation
             this.style.transform = 'scale(0.98)';
             setTimeout(() => {
                 localStorage.clear();
@@ -363,7 +267,6 @@ function initializeBypassPage() {
     
     if (contactSupportBtn) {
         contactSupportBtn.addEventListener('click', function() {
-            // Add click animation
             this.style.transform = 'scale(0.98)';
             setTimeout(() => {
                 this.style.transform = '';
@@ -390,7 +293,7 @@ function updateSessionInfo() {
     const userLoginEl = document.getElementById('userLogin');
     
     if (timestampEl) {
-        timestampEl.textContent = '2025-08-08 10:53:22 UTC';
+        timestampEl.textContent = '2025-08-08 11:58:26 UTC';
     }
     
     if (userAgentEl) {
@@ -426,9 +329,8 @@ function animateViolations() {
 
 // Update timestamps throughout the site
 function updateTimestamps() {
-    const utcString = '2025-08-08 10:53:22 UTC';
+    const utcString = '2025-08-08 11:58:26 UTC';
     
-    // Update any timestamp elements
     const timestampElements = document.querySelectorAll('[id*="timestamp"], .timestamp');
     timestampElements.forEach(el => {
         if (el.textContent.includes('UTC') || el.textContent.includes('2025')) {
@@ -439,7 +341,6 @@ function updateTimestamps() {
 
 // Basic click effects only
 document.addEventListener('click', function(e) {
-    // Add click effect to buttons
     if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
         const btn = e.target.tagName === 'BUTTON' ? e.target : e.target.closest('button');
         btn.style.transform = 'scale(0.98)';
@@ -449,7 +350,7 @@ document.addEventListener('click', function(e) {
     }
 });
 
-// Modal Functions with HIGHEST Z-INDEX
+// Modal Functions
 function showTermsModal() {
     const modalHTML = `
         <div class="modal-overlay" id="termsModal" style="z-index: 999999 !important;">
@@ -468,8 +369,8 @@ function showTermsModal() {
                         <h4>🔐 Verification Process</h4>
                         <ul>
                             <li>Complete verification through authorized partners</li>
-                            <li>Access tokens are single-use and expire after 24 hours</li>
-                            <li>Sharing tokens is strictly prohibited</li>
+                            <li>Access expires after 24 hours</li>
+                            <li>Sharing access is strictly prohibited</li>
                             <li>Multiple failed attempts may result in restrictions</li>
                         </ul>
                     </div>
@@ -524,20 +425,20 @@ function showPrivacyModal() {
                     <div class="modal-section">
                         <h4>🎯 Information We Collect</h4>
                         <ul>
-                            <li><strong>Verification Tokens:</strong> Used solely to verify task completion</li>
                             <li><strong>Session Data:</strong> Temporary data to maintain verification status</li>
-                            <li><strong>Timestamps:</strong> For token expiration and abuse prevention</li>
+                            <li><strong>Timestamps:</strong> For session expiration and abuse prevention</li>
                             <li><strong>Browser Info:</strong> Basic technical data for security</li>
+                            <li><strong>Referrer Data:</strong> To verify completion of required steps</li>
                         </ul>
                     </div>
                     
                     <div class="modal-section">
                         <h4>🛡️ How We Use Your Information</h4>
                         <ul>
-                            <li>Tokens verify completion of verification tasks</li>
                             <li>Session data ensures smooth user experience</li>
-                            <li>Timestamps prevent token abuse and expiration</li>
+                            <li>Timestamps prevent abuse and manage expiration</li>
                             <li>Browser info helps detect security threats</li>
+                            <li>Referrer data verifies legitimate access</li>
                         </ul>
                     </div>
                     
@@ -547,7 +448,7 @@ function showPrivacyModal() {
                             <li><strong>We DO NOT collect personal information</strong></li>
                             <li>No usernames, emails, or personal data stored</li>
                             <li>All data is temporary and automatically deleted</li>
-                            <li>Tokens are hashed for security</li>
+                            <li>Session data is encrypted and secure</li>
                         </ul>
                     </div>
                     
@@ -556,7 +457,7 @@ function showPrivacyModal() {
                         <ul>
                             <li>Session data: Deleted after 24 hours</li>
                             <li>Security logs: Kept locally, cleared regularly</li>
-                            <li>Tokens: Single-use and immediately invalidated</li>
+                            <li>Verification status: Single-use and immediately invalidated</li>
                         </ul>
                     </div>
                     
