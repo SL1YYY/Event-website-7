@@ -11,9 +11,6 @@ const SECURITY_CONFIG = {
 // Security State
 let securityState = {
     attempts: 0,
-    blocked: false,
-    devToolsDetected: false,
-    suspiciousActivity: false,
     sessionId: generateSessionId(),
     userAgent: navigator.userAgent,
     timestamp: new Date().toISOString()
@@ -23,53 +20,36 @@ let securityState = {
 document.addEventListener('DOMContentLoaded', function() {
     initializeSecurity();
     initializePageLogic();
-    startSecurityMonitoring();
     updateTimestamps();
 });
 
-// Security Functions (TONED DOWN)
+// MINIMAL Security Functions - ONLY what you asked for
 function initializeSecurity() {
-    detectDevTools();
+    // ONLY block right-click and DevTools shortcuts
     document.addEventListener('contextmenu', e => e.preventDefault());
     document.addEventListener('keydown', handleKeyDown);
     
+    // ONLY check referrer on redirect page (for ad bypass prevention)
     if (window.location.pathname.includes('redirect.html')) {
         validateReferrer();
     }
     
-    // Removed automation detection - too aggressive
     validateSession();
 }
 
-function detectDevTools() {
-    const threshold = 160;
-    
-    function check() {
-        if (window.outerHeight - window.innerHeight > threshold || 
-            window.outerWidth - window.innerWidth > threshold) {
-            if (!securityState.devToolsDetected) {
-                securityState.devToolsDetected = true;
-                logSecurityEvent('DevTools detected');
-                handleSecurityViolation('devtools');
-            }
-        }
-    }
-    
-    setInterval(check, 5000); // Check less frequently
-}
-
 function handleKeyDown(e) {
+    // ONLY block DevTools shortcuts
     if (e.key === 'F12' || 
         (e.ctrlKey && e.shiftKey && e.key === 'I') ||
         (e.ctrlKey && e.shiftKey && e.key === 'C') ||
         (e.ctrlKey && e.key === 'u')) {
         e.preventDefault();
-        logSecurityEvent('Blocked keyboard shortcut: ' + e.key);
         return false;
     }
 }
 
 function validateReferrer() {
+    // ONLY for preventing ad bypass
     const validReferrers = [
         'https://lootlabs.net',
         'https://lootdest.org',
@@ -78,8 +58,7 @@ function validateReferrer() {
     
     const referrer = document.referrer;
     if (!referrer) {
-        logSecurityEvent('No referrer detected');
-        return;
+        return; // Don't redirect for no referrer
     }
     
     let isValidReferrer = false;
@@ -91,7 +70,6 @@ function validateReferrer() {
     }
     
     if (!isValidReferrer) {
-        logSecurityEvent('Invalid referrer: ' + referrer);
         redirectToBypass('Invalid referrer detected');
     }
 }
@@ -103,11 +81,9 @@ function validateSession() {
             const session = JSON.parse(sessionData);
             if (Date.now() - session.created > SECURITY_CONFIG.sessionTimeout) {
                 localStorage.removeItem('eventSession');
-                logSecurityEvent('Session expired');
             }
         } catch (e) {
             localStorage.removeItem('eventSession');
-            logSecurityEvent('Invalid session data');
         }
     }
 }
@@ -116,40 +92,7 @@ function generateSessionId() {
     return 'SES-' + Math.random().toString(36).substr(2, 9).toUpperCase();
 }
 
-function logSecurityEvent(event) {
-    console.log(`[SECURITY] ${new Date().toISOString()}: ${event}`);
-    
-    const events = JSON.parse(localStorage.getItem('securityEvents') || '[]');
-    events.push({
-        timestamp: new Date().toISOString(),
-        event: event,
-        userAgent: navigator.userAgent,
-        url: window.location.href
-    });
-    
-    if (events.length > 50) {
-        events.splice(0, events.length - 50);
-    }
-    
-    localStorage.setItem('securityEvents', JSON.stringify(events));
-}
-
-function handleSecurityViolation(type) {
-    switch (type) {
-        case 'devtools':
-            // Only redirect sometimes, not always
-            if (Math.random() > 0.8) {
-                redirectToBypass('DevTools usage detected');
-            }
-            break;
-        case 'referrer':
-            redirectToBypass('Invalid access method');
-            break;
-    }
-}
-
 function redirectToBypass(reason) {
-    logSecurityEvent('Redirecting to bypass page: ' + reason);
     localStorage.setItem('bypassReason', reason);
     window.location.href = 'bypass.html';
 }
@@ -197,8 +140,6 @@ function initializeIndexPage() {
             };
             localStorage.setItem('eventSession', JSON.stringify(sessionData));
             
-            logSecurityEvent('User initiated access process');
-            
             // Show loading state
             this.innerHTML = '<span>Opening Verification...</span>';
             this.disabled = true;
@@ -244,7 +185,6 @@ function initializeRedirectPage() {
         eventBtn.addEventListener('click', function() {
             const link = this.getAttribute('data-link');
             if (link && link !== '') {
-                logSecurityEvent('User accessed event');
                 // Add click animation
                 this.style.transform = 'scale(0.98)';
                 setTimeout(() => {
@@ -275,7 +215,6 @@ function validateAccessToken() {
     // Check attempts
     securityState.attempts++;
     if (securityState.attempts > SECURITY_CONFIG.maxAttempts) {
-        logSecurityEvent('Too many validation attempts');
         redirectToBypass('Too many failed attempts');
         return;
     }
@@ -285,10 +224,8 @@ function validateAccessToken() {
     setTimeout(() => {
         if (isValidToken(token)) {
             showSuccess(token);
-            logSecurityEvent('Valid token provided: ' + token);
         } else {
             showError('Invalid token. Please check your token and try again.');
-            logSecurityEvent('Invalid token attempt: ' + token);
             
             if (securityState.attempts >= SECURITY_CONFIG.maxAttempts) {
                 setTimeout(() => {
@@ -391,7 +328,6 @@ function checkExistingSession() {
                 setTimeout(() => {
                     showSuccess('EXISTING-SESSION');
                 }, 1000);
-                logSecurityEvent('Existing valid session found');
             }
         } catch (e) {
             localStorage.removeItem('eventSession');
@@ -440,7 +376,6 @@ function initializeBypassPage() {
     
     const bypassReason = localStorage.getItem('bypassReason');
     if (bypassReason) {
-        logSecurityEvent('Bypass page accessed: ' + bypassReason);
         localStorage.removeItem('bypassReason');
     }
     
@@ -455,7 +390,7 @@ function updateSessionInfo() {
     const userLoginEl = document.getElementById('userLogin');
     
     if (timestampEl) {
-        timestampEl.textContent = '2025-08-08 10:41:20 UTC';
+        timestampEl.textContent = '2025-08-08 10:53:22 UTC';
     }
     
     if (userAgentEl) {
@@ -491,7 +426,7 @@ function animateViolations() {
 
 // Update timestamps throughout the site
 function updateTimestamps() {
-    const utcString = '2025-08-08 10:41:20 UTC';
+    const utcString = '2025-08-08 10:53:22 UTC';
     
     // Update any timestamp elements
     const timestampElements = document.querySelectorAll('[id*="timestamp"], .timestamp');
@@ -502,67 +437,19 @@ function updateTimestamps() {
     });
 }
 
-// SIMPLIFIED Security Monitoring - No more aggressive checks
-function startSecurityMonitoring() {
-    // Just basic click effects, no security violations
-    document.addEventListener('click', function(e) {
-        // Add click effect to buttons
-        if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
-            const btn = e.target.tagName === 'BUTTON' ? e.target : e.target.closest('button');
-            btn.style.transform = 'scale(0.98)';
-            setTimeout(() => {
-                btn.style.transform = '';
-            }, 150);
-        }
-    });
-    
-    // Basic security check every 60 seconds instead of 30
-    setInterval(performSecurityCheck, 60000);
-}
-
-function performSecurityCheck() {
-    // Just check localStorage integrity
-    try {
-        const testData = localStorage.getItem('securityEvents');
-        if (testData) {
-            JSON.parse(testData);
-        }
-    } catch (e) {
-        logSecurityEvent('Local storage corruption detected');
-        localStorage.clear();
+// Basic click effects only
+document.addEventListener('click', function(e) {
+    // Add click effect to buttons
+    if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+        const btn = e.target.tagName === 'BUTTON' ? e.target : e.target.closest('button');
+        btn.style.transform = 'scale(0.98)';
+        setTimeout(() => {
+            btn.style.transform = '';
+        }, 150);
     }
-}
+});
 
-// Simplified anti-debugging - less aggressive
-(() => {
-    let devtools = false;
-    let threshold = 160;
-    
-    function detectDevTools() {
-        if (window.outerHeight - window.innerHeight > threshold || 
-            window.outerWidth - window.innerWidth > threshold) {
-            devtools = true;
-        }
-    }
-    
-    function randomDelay() {
-        return Math.floor(Math.random() * 3000) + 2000; // Longer delays
-    }
-    
-    setInterval(() => {
-        detectDevTools();
-        if (devtools && Math.random() > 0.9) { // Even less likely to trigger
-            if (window.location.pathname !== '/bypass.html') {
-                redirectToBypass('DevTools detected during monitoring');
-            }
-        }
-    }, randomDelay());
-})();
-
-// Initialize security logging
-logSecurityEvent('Security system initialized for user: SL1YYY');
-
-// Modal Functions with HIGHER Z-INDEX
+// Modal Functions with HIGHEST Z-INDEX
 function showTermsModal() {
     const modalHTML = `
         <div class="modal-overlay" id="termsModal" style="z-index: 999999 !important;">
