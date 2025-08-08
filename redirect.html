@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SYNX//EVENTS - Access Verification</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <meta name="description" content="Verify your access token to join exclusive Roblox events">
+    <meta name="robots" content="noindex, nofollow">
+</head>
+<body>
+    <div class="starfield"></div>
+    
+    <div class="container">
+        <header class="header">
+            <div class="logo">
+                <h1 class="title">SYNX//EVENTS</h1>
+            </div>
+            <div class="subtitle">Access Verification</div>
+        </header>
+
+        <main class="main-content">
+            <!-- Token Input Section -->
+            <div class="verification-card" id="tokenInput">
+                <div class="section-header">
+                    <h2 class="section-title" id="verificationTitle">Verify Access Token</h2>
+                    <div class="status-badge status-upcoming" id="statusIndicator">
+                        <span>🔐</span>
+                        <span id="statusText">Ready</span>
+                    </div>
+                </div>
+
+                <div class="step-card">
+                    <div class="step-header">
+                        <div class="step-icon">🎟️</div>
+                        <div class="step-number">Final Step</div>
+                    </div>
+                    <h3 class="step-title">Enter Your Access Token</h3>
+                    <p class="step-description">
+                        After completing the LootLabs verification, enter your access token below 
+                        to unlock exclusive event access.
+                    </p>
+                </div>
+
+                <div class="input-group">
+                    <label for="accessToken" class="input-label">Access Token</label>
+                    <input 
+                        type="text" 
+                        id="accessToken" 
+                        placeholder="Enter your token (e.g., TOKEN-123)"
+                        autocomplete="off"
+                        spellcheck="false"
+                    >
+                </div>
+
+                <div class="token-hints">
+                    <div class="step-card">
+                        <h4 style="color: var(--primary-cyan); margin-bottom: 12px;">💡 Token Format</h4>
+                        <p style="color: var(--text-secondary); font-size: 14px;">
+                            • Format: TOKEN-XXX (e.g., TOKEN-123)<br>
+                            • Case sensitive - enter exactly as shown<br>
+                            • Complete LootLabs verification to receive your token
+                        </p>
+                    </div>
+                </div>
+
+                <div class="action-section">
+                    <button id="validateToken" class="primary-btn">
+                        <span>Validate Token</span>
+                    </button>
+                    <div id="loadingSpinner" class="loading-spinner hidden"></div>
+                </div>
+            </div>
+
+            <!-- Success Section -->
+            <div class="verification-card hidden" id="successSection">
+                <div class="success-section">
+                    <div class="success-icon">
+                        <span>✅</span>
+                    </div>
+                    
+                    <div class="section-header">
+                        <h2 class="section-title">Access Granted!</h2>
+                        <div class="status-badge status-completed">
+                            <span>✅</span>
+                            <span>Verified</span>
+                        </div>
+                    </div>
+
+                    <p class="success-message">
+                        🎉 Your token has been validated successfully! You now have access to exclusive events.
+                    </p>
+
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon">⏰</div>
+                            <span class="stat-number">24hrs</span>
+                            <div class="stat-label">Access Valid</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">🎮</div>
+                            <span class="stat-number">LIVE</span>
+                            <div class="stat-label">Events Active</div>
+                        </div>
+                    </div>
+
+                    <div class="access-info">
+                        <div class="step-card">
+                            <h4 style="color: var(--success-green); margin-bottom: 12px;">🔓 Access Details</h4>
+                            <div class="event-details">
+                                <div class="detail-item">
+                                    <span class="detail-icon">👤</span>
+                                    <span class="detail-label">User:</span>
+                                    <span class="detail-value">SL1YYY</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-icon">🕐</span>
+                                    <span class="detail-label">Verified:</span>
+                                    <span class="detail-value">2025-08-05 21:20:37 UTC</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-icon">⏰</span>
+                                    <span class="detail-label">Expires:</span>
+                                    <span class="detail-value" id="expiryTime">2025-08-06 21:20:37 UTC</span>
+                                </div>
+                                <div class="detail-item">
+                                    <span class="detail-icon">🎯</span>
+                                    <span class="detail-label">Status:</span>
+                                    <span class="detail-value success">Active</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="action-section">
+                        <button id="eventButton" class="primary-btn" data-link="">
+                            <span>🎮 Join Live Events</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Error Section -->
+            <div class="verification-card hidden" id="errorSection">
+                <div class="error-section">
+                    <div class="warning-icon">⚠️</div>
+                    
+                    <div class="section-header">
+                        <h2 class="section-title" style="color: var(--error-red);">Verification Failed</h2>
+                        <div class="status-badge" style="background: rgba(239, 68, 68, 0.15); color: var(--error-red); border: 1px solid rgba(239, 68, 68, 0.3);">
+                            <span>❌</span>
+                            <span>Invalid</span>
+                        </div>
+                    </div>
+
+                    <p class="error-message" id="errorMessage">
+                        Invalid token. Please check your token and try again.
+                    </p>
+
+                    <div class="help-section">
+                        <div class="step-card" style="border-color: rgba(239, 68, 68, 0.2);">
+                            <h4 style="color: var(--error-red); margin-bottom: 12px;">🆘 Need Help?</h4>
+                            <ul style="color: var(--text-secondary); font-size: 14px; list-style: none; padding: 0;">
+                                <li style="margin: 8px 0;">• Ensure you completed LootLabs verification</li>
+                                <li style="margin: 8px 0;">• Check token format: TOKEN-XXX</li>
+                                <li style="margin: 8px 0;">• Token is case-sensitive</li>
+                                <li style="margin: 8px 0;">• Contact support if issues persist</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="action-section">
+                        <button id="retryButton" class="secondary-btn">
+                            <span>🔄 Try Again</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Current Events Section -->
+            <div class="live-events">
+                <div class="section-header">
+                    <h2 class="section-title">Live Events</h2>
+                    <p class="section-description">
+                        Events currently running - complete verification to join!
+                    </p>
+                </div>
+
+                <div class="event-card">
+                    <div class="event-header">
+                        <h3 class="event-title">Simon Says Championship</h3>
+                        <div class="status-badge status-live">
+                            <span>🔴</span>
+                            <span>Live Now</span>
+                        </div>
+                    </div>
+                    <p class="event-description">
+                        Follow commands perfectly to survive each round and claim victory!
+                    </p>
+                    <div class="event-details">
+                        <div class="detail-item">
+                            <span class="detail-icon">📅</span>
+                            <span class="detail-value">Aug 5, 2025</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-icon">⏰</span>
+                            <span class="detail-value">9:20 PM UTC</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-icon">🏆</span>
+                            <span class="detail-value">1000 Robux</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-icon">👥</span>
+                            <span class="detail-value">142 players</span>
+                        </div>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 78%;"></div>
+                    </div>
+                    <p style="color: var(--text-secondary); font-size: 13px; margin-top: 8px; text-align: center;">
+                        78% - Game in progress
+                    </p>
+                </div>
+
+                <div class="event-card">
+                    <div class="event-header">
+                        <h3 class="event-title">Battle Royale Extreme</h3>
+                        <div class="status-badge status-upcoming">
+                            <span>⏳</span>
+                            <span>Starting Soon</span>
+                        </div>
+                    </div>
+                    <p class="event-description">
+                        Last player standing wins big! Ultimate survival competition.
+                    </p>
+                    <div class="event-details">
+                        <div class="detail-item">
+                            <span class="detail-icon">📅</span>
+                            <span class="detail-value">Aug 5, 2025</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-icon">⏰</span>
+                            <span class="detail-value">10:00 PM UTC</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-icon">🏆</span>
+                            <span class="detail-value">1500 Robux</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="detail-icon">👥</span>
+                            <span class="detail-value">67 registered</span>
+                        </div>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 40%;"></div>
+                    </div>
+                    <p style="color: var(--text-secondary); font-size: 13px; margin-top: 8px; text-align: center;">
+                        Starts in 40 minutes
+                    </p>
+                </div>
+            </div>
+
+            <!-- Discord Section -->
+            <div class="discord-section">
+                <div class="discord-card">
+                    <h3 class="discord-title">🎮 Need Support?</h3>
+                    <p class="discord-description">
+                        Having trouble with verification? Join our Discord community 
+                        for instant support and event updates.
+                    </p>
+                    <a href="https://discord.gg/dyGvnnymbHj" class="discord-btn" target="_blank">
+                        <span>💬</span>
+                        <span>Get Help on Discord</span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- Security Info -->
+            <div class="security-info">
+                <div class="step-card">
+                    <div class="step-header">
+                        <div class="step-icon">🛡️</div>
+                        <div class="status-badge status-completed">Secure</div>
+                    </div>
+                    <h3 class="step-title">Security Information</h3>
+                    <p class="step-description">
+                        This portal uses advanced security including token encryption, 
+                        behavioral analysis, and real-time monitoring for your protection.
+                    </p>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px;">
+                        <span class="status-badge status-completed">🔐 Token Encryption</span>
+                        <span class="status-badge status-completed">🔍 Activity Monitoring</span>
+                        <span class="status-badge status-completed">⚡ Real-time Validation</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <div class="footer-content">
+                <p class="footer-text">&copy; 2025 SYNX Event Portal. Secure access system.</p>
+                <div class="footer-links">
+                    <a href="index.html" class="footer-link">Home</a>
+                    <a href="#" class="footer-link">Privacy</a>
+                    <a href="https://discord.gg/dyGvnnymbHj" class="footer-link" target="_blank">Support</a>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
