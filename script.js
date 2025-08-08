@@ -27,7 +27,7 @@ document.addEventListener('DOMContentLoaded', function() {
     updateTimestamps();
 });
 
-// Security Functions
+// Security Functions (TONED DOWN)
 function initializeSecurity() {
     detectDevTools();
     document.addEventListener('contextmenu', e => e.preventDefault());
@@ -37,7 +37,7 @@ function initializeSecurity() {
         validateReferrer();
     }
     
-    detectAutomation();
+    // Removed automation detection - too aggressive
     validateSession();
 }
 
@@ -55,15 +55,14 @@ function detectDevTools() {
         }
     }
     
-    setInterval(check, 1000);
+    setInterval(check, 5000); // Check less frequently
 }
 
 function handleKeyDown(e) {
     if (e.key === 'F12' || 
         (e.ctrlKey && e.shiftKey && e.key === 'I') ||
         (e.ctrlKey && e.shiftKey && e.key === 'C') ||
-        (e.ctrlKey && e.key === 'u') ||
-        (e.ctrlKey && e.key === 's')) {
+        (e.ctrlKey && e.key === 'u')) {
         e.preventDefault();
         logSecurityEvent('Blocked keyboard shortcut: ' + e.key);
         return false;
@@ -95,31 +94,6 @@ function validateReferrer() {
         logSecurityEvent('Invalid referrer: ' + referrer);
         redirectToBypass('Invalid referrer detected');
     }
-}
-
-function detectAutomation() {
-    if (navigator.webdriver || 
-        window.phantom || 
-        window.callPhantom ||
-        window._phantom ||
-        window.Buffer ||
-        window.emit ||
-        window.spawn) {
-        logSecurityEvent('Automation detected');
-        handleSecurityViolation('automation');
-    }
-    
-    let mouseEvents = 0;
-    document.addEventListener('mousemove', () => {
-        mouseEvents++;
-    });
-    
-    setTimeout(() => {
-        if (mouseEvents === 0) {
-            logSecurityEvent('No mouse activity detected');
-            securityState.suspiciousActivity = true;
-        }
-    }, 5000);
 }
 
 function validateSession() {
@@ -161,16 +135,12 @@ function logSecurityEvent(event) {
 }
 
 function handleSecurityViolation(type) {
-    securityState.suspiciousActivity = true;
-    
     switch (type) {
         case 'devtools':
-            if (Math.random() > 0.7) {
+            // Only redirect sometimes, not always
+            if (Math.random() > 0.8) {
                 redirectToBypass('DevTools usage detected');
             }
-            break;
-        case 'automation':
-            redirectToBypass('Automated access detected');
             break;
         case 'referrer':
             redirectToBypass('Invalid access method');
@@ -218,11 +188,6 @@ function initializeIndexPage() {
             setTimeout(() => {
                 this.style.transform = '';
             }, 150);
-            
-            if (securityState.suspiciousActivity) {
-                redirectToBypass('Suspicious activity detected');
-                return;
-            }
             
             // Create session
             const sessionData = {
@@ -490,7 +455,7 @@ function updateSessionInfo() {
     const userLoginEl = document.getElementById('userLogin');
     
     if (timestampEl) {
-        timestampEl.textContent = '2025-08-08 10:33:14 UTC';
+        timestampEl.textContent = '2025-08-08 10:41:20 UTC';
     }
     
     if (userAgentEl) {
@@ -526,7 +491,7 @@ function animateViolations() {
 
 // Update timestamps throughout the site
 function updateTimestamps() {
-    const utcString = '2025-08-08 10:33:14 UTC';
+    const utcString = '2025-08-08 10:41:20 UTC';
     
     // Update any timestamp elements
     const timestampElements = document.querySelectorAll('[id*="timestamp"], .timestamp');
@@ -537,29 +502,10 @@ function updateTimestamps() {
     });
 }
 
-// Helper function to check if click is on modal elements
-function isModalClick(target) {
-    return target.closest('.modal-overlay') || 
-           target.closest('[onclick*="Modal"]') ||
-           target.textContent.toLowerCase().includes('terms') ||
-           target.textContent.toLowerCase().includes('privacy');
-}
-
-// Security Monitoring with Modal Exception
+// SIMPLIFIED Security Monitoring - No more aggressive checks
 function startSecurityMonitoring() {
-    let clickCount = 0;
-    let rapidClicks = 0;
-    
+    // Just basic click effects, no security violations
     document.addEventListener('click', function(e) {
-        // Ignore modal-related clicks for security monitoring
-        if (isModalClick(e.target)) {
-            logSecurityEvent('Modal interaction - bypassing security checks');
-            return;
-        }
-        
-        clickCount++;
-        rapidClicks++;
-        
         // Add click effect to buttons
         if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
             const btn = e.target.tagName === 'BUTTON' ? e.target : e.target.closest('button');
@@ -568,47 +514,14 @@ function startSecurityMonitoring() {
                 btn.style.transform = '';
             }, 150);
         }
-        
-        setTimeout(() => {
-            rapidClicks = 0;
-        }, 1000);
-        
-        if (rapidClicks > 10) {
-            logSecurityEvent('Rapid clicking detected');
-            securityState.suspiciousActivity = true;
-        }
     });
     
-    document.addEventListener('visibilitychange', function() {
-        if (document.hidden) {
-            logSecurityEvent('Tab hidden');
-        } else {
-            logSecurityEvent('Tab visible');
-        }
-    });
-    
-    window.addEventListener('focus', function() {
-        logSecurityEvent('Window focused');
-    });
-    
-    window.addEventListener('blur', function() {
-        logSecurityEvent('Window blurred');
-    });
-    
-    setInterval(performSecurityCheck, 30000);
+    // Basic security check every 60 seconds instead of 30
+    setInterval(performSecurityCheck, 60000);
 }
 
 function performSecurityCheck() {
-    const scripts = document.querySelectorAll('script');
-    const expectedScripts = ['script.js'];
-    
-    scripts.forEach(script => {
-        if (script.src && !expectedScripts.some(expected => script.src.includes(expected))) {
-            logSecurityEvent('Unexpected script detected: ' + script.src);
-            handleSecurityViolation('script-injection');
-        }
-    });
-    
+    // Just check localStorage integrity
     try {
         const testData = localStorage.getItem('securityEvents');
         if (testData) {
@@ -620,7 +533,7 @@ function performSecurityCheck() {
     }
 }
 
-// Anti-debugging measures
+// Simplified anti-debugging - less aggressive
 (() => {
     let devtools = false;
     let threshold = 160;
@@ -633,12 +546,12 @@ function performSecurityCheck() {
     }
     
     function randomDelay() {
-        return Math.floor(Math.random() * 1000) + 500;
+        return Math.floor(Math.random() * 3000) + 2000; // Longer delays
     }
     
     setInterval(() => {
         detectDevTools();
-        if (devtools && Math.random() > 0.8) {
+        if (devtools && Math.random() > 0.9) { // Even less likely to trigger
             if (window.location.pathname !== '/bypass.html') {
                 redirectToBypass('DevTools detected during monitoring');
             }
@@ -649,10 +562,10 @@ function performSecurityCheck() {
 // Initialize security logging
 logSecurityEvent('Security system initialized for user: SL1YYY');
 
-// Modal Functions
+// Modal Functions with HIGHER Z-INDEX
 function showTermsModal() {
     const modalHTML = `
-        <div class="modal-overlay" id="termsModal">
+        <div class="modal-overlay" id="termsModal" style="z-index: 999999 !important;">
             <div class="modal-content">
                 <div class="modal-header">
                     <h3 class="modal-title">📜 Terms of Service</h3>
@@ -714,7 +627,7 @@ function showTermsModal() {
 
 function showPrivacyModal() {
     const modalHTML = `
-        <div class="modal-overlay" id="privacyModal">
+        <div class="modal-overlay" id="privacyModal" style="z-index: 999999 !important;">
             <div class="modal-content">
                 <div class="modal-header">
                     <h3 class="modal-title">🔒 Privacy Policy</h3>
