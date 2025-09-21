@@ -1,513 +1,266 @@
-// Security Configuration
-const SECURITY_CONFIG = {
-    lootlabsUrl: "https://lootdest.org/s?UrSxQK6R",
-    robloxEventUrl: "https://www.roblox.com/games/123456789/Event-Game",
-    discordUrl: "https://discord.gg/dyGvnnymbHj",
-    sessionTimeout: 86400000 // 24 hours
+// --- Synxverse improved client-only verification script ---
+// NOTE: This improves your static-site flow. It is NOT foolproof.
+// Save this as script.js and replace the old one.
+
+const CONFIG = {
+  lootlabsRefDomains: ['lootdest.org','lootlabs.net','linkvertise.com','linkvertisecode.com'],
+  robloxEventUrl: "https://www.roblox.com/games/123456789/Event-Game",
+  discordUrl: "https://discord.gg/ZJT3qKA7",
+  sessionTTLms: 10 * 60 * 1000, // session validity (10 minutes)
+  maxRefChecks: 60, // checks (3 min at 3s interval)
 };
 
-// Security State
-let securityState = {
-    sessionId: generateSessionId(),
-    userAgent: navigator.userAgent,
-    timestamp: new Date().toISOString()
-};
+// small util
+function now() { return Date.now(); }
+function randId(len = 10) { return Math.random().toString(36).slice(2, 2 + len).toUpperCase(); }
+function b64(s){ try{return btoa(unescape(encodeURIComponent(s))); } catch(e){return '';}}
+function unb64(s){ try{return decodeURIComponent(escape(atob(s))); } catch(e){return '';}}
+function setStatus(text){ const el=document.getElementById('statusText'); if(el) el.textContent=text; }
 
-// Initialize everything when DOM loads
-document.addEventListener('DOMContentLoaded', function() {
-    initializeSecurity();
-    initializePageLogic();
-    updateTimestamps();
-});
-
-// MINIMAL Security Functions
-function initializeSecurity() {
-    // ONLY block right-click and DevTools shortcuts
-    document.addEventListener('contextmenu', e => e.preventDefault());
-    document.addEventListener('keydown', handleKeyDown);
-    
-    validateSession();
+// ----------------- session helpers -----------------
+function makeSessionObject(){
+  return {
+    sId: 'S-' + randId(12),
+    createdAt: now(),
+    verified: false,
+    verifiedBy: null,   // 'referrer' or later 'bot'
+    expiresAt: now() + CONFIG.sessionTTLms
+  };
 }
 
-function handleKeyDown(e) {
-    // ONLY block DevTools shortcuts
-    if (e.key === 'F12' || 
-        (e.ctrlKey && e.shiftKey && e.key === 'I') ||
-        (e.ctrlKey && e.shiftKey && e.key === 'C') ||
-        (e.ctrlKey && e.key === 'u')) {
-        e.preventDefault();
-        return false;
+function saveSession(session){
+  // use sessionStorage so tabs close invalidate it
+  sessionStorage.setItem('synx_session', JSON.stringify(session));
+}
+
+function loadSession(){
+  const raw = sessionStorage.getItem('synx_session');
+  if(!raw) return null;
+  try{
+    const s = JSON.parse(raw);
+    if(!s || typeof s !== 'object') return null;
+    // expiry check
+    if(s.expiresAt && now() > s.expiresAt) { sessionStorage.removeItem('synx_session'); return null; }
+    return s;
+  }catch(e){ sessionStorage.removeItem('synx_session'); return null; }
+}
+
+function clearSession(){
+  sessionStorage.removeItem('synx_session');
+}
+
+// ----------------- anti-tamper detection -----------------
+function isDevToolsOpen(){
+  // heuristic only: not perfect
+  const threshold = 160;
+  const widthDiff = Math.abs(window.outerWidth - window.innerWidth);
+  const heightDiff = Math.abs(window.outerHeight - window.innerHeight);
+  if(widthDiff > threshold || heightDiff > threshold) return true;
+  // try to detect debugger via toString hack
+  let dev = false;
+  const start = performance.now();
+  debugger;
+  const end = performance.now();
+  if(end - start > 100) dev = true;
+  return dev;
+}
+
+function attachBasicTamperHandlers(){
+  // discourage copy/paste and devtools
+  document.addEventListener('contextmenu', e => e.preventDefault());
+  document.addEventListener('keydown', e => {
+    if(e.key==='F12' || (e.ctrlKey && e.shiftKey && ['I','C'].includes(e.key)) || (e.ctrlKey && e.key==='u')) {
+      e.preventDefault();
+      // mild UX warning
+      const el=document.getElementById('statusText');
+      if(el) el.textContent = 'DevTools blocked during verification.';
+      return false;
     }
-}
-
-function validateSession() {
-    const sessionData = localStorage.getItem('eventSession');
-    if (sessionData) {
-        try {
-            const session = JSON.parse(sessionData);
-            if (Date.now() - session.created > SECURITY_CONFIG.sessionTimeout) {
-                localStorage.removeItem('eventSession');
-            }
-        } catch (e) {
-            localStorage.removeItem('eventSession');
-        }
+  });
+  // intercept copy of anchor elements
+  document.addEventListener('copy', e=>{
+    const sel = window.getSelection().toString();
+    if(sel && sel.includes('roblox.com')) {
+      e.preventDefault();
+      setStatus('Copy disabled for links.');
     }
+  });
 }
 
-function generateSessionId() {
-    return 'SES-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+// ----------------- UI helpers -----------------
+function setEventButtonLink(encoded) {
+  const btn = document.getElementById('eventButton');
+  if(!btn) return;
+  // set data attribute with obfuscated value (not plain link in DOM)
+  btn.setAttribute('data-enc', encoded);
+  btn.removeAttribute('data-link'); // ensure not leaking
+  btn.classList.remove('disabled');
 }
 
-function redirectToBypass(reason) {
-    localStorage.setItem('bypassReason', reason);
-    window.location.href = 'bypass.html';
+function openEventFromButton(){
+  const btn = document.getElementById('eventButton');
+  if(!btn) return;
+  const enc = btn.getAttribute('data-enc');
+  if(!enc) { alert('No event link yet. Complete verification.'); return; }
+  const url = unb64(enc);
+  // open in new tab/window
+  window.open(url, '_blank', 'noopener');
 }
 
-// Page-specific Logic
-function initializePageLogic() {
-    const currentPage = getCurrentPage();
-    
-    switch (currentPage) {
-        case 'index':
-            initializeIndexPage();
-            break;
-        case 'redirect':
-            initializeRedirectPage();
-            break;
-        case 'bypass':
-            initializeBypassPage();
-            break;
+// ----------------- core flows -----------------
+
+// index page flow: user clicks begin --> create session --> open ad partner --> go to redirect.html
+function initIndexPage(){
+  attachBasicTamperHandlers();
+  const begin = document.getElementById('beginAccess');
+  if(!begin) return;
+  begin.addEventListener('click', ()=>{
+    // create ephemeral session
+    const session = makeSessionObject();
+    saveSession(session);
+    setStatus('Opening verification partner...');
+    // Open ad partner in new tab so referrer flow is possible for some users
+    window.open(CONFIG.lootlabsUrl || 'about:blank','_blank');
+    // small UI feedback then redirect to redirect.html
+    begin.disabled = true;
+    begin.textContent = 'Verification started...';
+    setTimeout(()=>{ window.location.href = 'redirect.html'; }, 900);
+  });
+}
+
+// redirect.html flow: check referrer and poll for verification
+function initRedirectPage(){
+  attachBasicTamperHandlers();
+  const btn = document.getElementById('eventButton');
+  if(btn){
+    btn.addEventListener('click', openEventFromButton);
+  }
+  const session = loadSession();
+  if(!session){
+    // no session -> force bypass page
+    setStatus('No verification session detected. Redirecting...');
+    setTimeout(()=> window.location.href = 'bypass.html', 800);
+    return;
+  }
+
+  // quick devtools check; if devtools open, send them to bypass
+  try{ if(isDevToolsOpen()){ sessionStorage.setItem('bypassReason','Devtools detected'); window.location.href='bypass.html'; return; } }catch(e){}
+
+  setStatus('Checking verification status...');
+  // If referrer points to partner domain right now, mark verified
+  const ref = document.referrer || '';
+  const lcRef = ref.toLowerCase();
+  let matched = false;
+  for(const d of CONFIG.lootlabsRefDomains){
+    if(lcRef.includes(d)){ matched = true; break; }
+  }
+  if(matched){
+    session.verified = true;
+    session.verifiedBy = 'referrer';
+    session.verifiedAt = now();
+    // give only a short expiry from verification moment (shorten leak window)
+    session.expiresAt = now() + (3 * 60 * 1000); // 3 minutes after verified
+    saveSession(session);
+    // obfuscate the roblox link and set on button
+    const encoded = b64(CONFIG.robloxEventUrl + '?s=' + session.sId); // append session id for tracking (client-side only)
+    setEventButtonLink(encoded);
+    setStatus('Verification detected! Click JOIN to open the event.');
+    return;
+  }
+
+  // otherwise, enter a short poll loop that checks if the session was validated (some partners redirect back)
+  let checks = 0;
+  const poll = setInterval(()=>{
+    checks++;
+    const cur = loadSession();
+    if(!cur){ clearInterval(poll); window.location.href='bypass.html'; return; }
+    // if verified by earlier flow, show success
+    if(cur.verified){
+      clearInterval(poll);
+      const encoded = b64(CONFIG.robloxEventUrl + '?s=' + cur.sId);
+      setEventButtonLink(encoded);
+      setStatus('Verification complete! Click JOIN to open the event.');
+      return;
     }
-}
-
-function getCurrentPage() {
-    const path = window.location.pathname;
-    if (path.includes('redirect.html')) return 'redirect';
-    if (path.includes('bypass.html')) return 'bypass';
-    return 'index';
-}
-
-// Index Page Logic
-function initializeIndexPage() {
-    const beginBtn = document.getElementById('beginAccess');
-    if (beginBtn) {
-        beginBtn.addEventListener('click', function() {
-            // Add visual feedback
-            this.style.transform = 'scale(0.98)';
-            setTimeout(() => {
-                this.style.transform = '';
-            }, 150);
-            
-            // Create session
-            const sessionData = {
-                created: Date.now(),
-                sessionId: securityState.sessionId,
-                stage: 'verification'
-            };
-            localStorage.setItem('eventSession', JSON.stringify(sessionData));
-            
-            // Show loading state
-            this.innerHTML = '<span>Opening Verification...</span>';
-            this.disabled = true;
-            
-            // Open LootLabs in new tab
-            window.open(SECURITY_CONFIG.lootlabsUrl, '_blank');
-            
-            // Redirect to verification page
-            setTimeout(() => {
-                window.location.href = 'redirect.html';
-            }, 2000);
-        });
-    }
-}
-
-// Redirect Page Logic - COMPLETELY CHANGED
-function initializeRedirectPage() {
-    const eventBtn = document.getElementById('eventButton');
-    
-    // Auto-check if user came from LootLabs
-    setTimeout(() => {
-        checkLootLabsCompletion();
-    }, 1000);
-    
-    if (eventBtn) {
-        eventBtn.addEventListener('click', function() {
-            const link = this.getAttribute('data-link');
-            if (link && link !== '') {
-                // Add click animation
-                this.style.transform = 'scale(0.98)';
-                setTimeout(() => {
-                    this.style.transform = '';
-                    window.open(link, '_blank');
-                }, 150);
-            }
-        });
-    }
-}
-
-function checkLootLabsCompletion() {
-    const referrer = document.referrer;
-    const sessionData = localStorage.getItem('eventSession');
-    
-    // Check if they have a valid session first
-    if (!sessionData) {
-        redirectToBypass('No verification session found');
+    // else check if referrer became correct (user returned)
+    const nowRef = document.referrer || '';
+    for(const d of CONFIG.lootlabsRefDomains){
+      if(nowRef.toLowerCase().includes(d)){
+        cur.verified = true;
+        cur.verifiedBy = 'referrer';
+        cur.verifiedAt = now();
+        cur.expiresAt = now() + (3 * 60 * 1000);
+        saveSession(cur);
+        clearInterval(poll);
+        const encoded = b64(CONFIG.robloxEventUrl + '?s=' + cur.sId);
+        setEventButtonLink(encoded);
+        setStatus('Verification complete! Click JOIN to open the event.');
         return;
+      }
     }
-    
-    // Check if they came from LootLabs/LootDest
-    if (referrer && (referrer.includes('lootdest.org') || referrer.includes('lootlabs.net'))) {
-        // They completed the verification!
-        showVerificationSuccess();
+
+    if(checks >= CONFIG.maxRefChecks){
+      clearInterval(poll);
+      // fallback: show token input to request manual verification via Discord (staff)
+      setStatus('Verification timed out. Request manual review via Discord.');
+      const tokenInput = document.getElementById('tokenInput');
+      if(tokenInput) tokenInput.classList.remove('hidden');
+      return;
+    }
+  }, 3000);
+}
+
+// bypass page: show reason, clear session, and provide contact
+function initBypassPage(){
+  attachBasicTamperHandlers();
+  const reason = sessionStorage.getItem('bypassReason') || 'Verification failed or bypass detected.';
+  const reasonEl = document.getElementById('bypassReason');
+  if(reasonEl) reasonEl.textContent = reason;
+  // clear session
+  clearSession();
+  // wire buttons
+  const goHome = document.getElementById('goHome');
+  if(goHome) goHome.addEventListener('click', ()=> { window.location.href='index.html'; });
+  const contact = document.getElementById('contactSupport');
+  if(contact) contact.addEventListener('click', ()=> { window.open(CONFIG.discordUrl,'_blank'); });
+}
+
+// optional manual token submit (for staff manual verification)
+function initManualTokenSubmit(){
+  const submit = document.getElementById('submitToken');
+  if(!submit) return;
+  submit.addEventListener('click', ()=>{
+    const tokenField = document.getElementById('tokenField');
+    if(!tokenField) return;
+    const entered = (tokenField.value||'').trim();
+    if(!entered){ alert('Paste the verification code you received from partner or staff.'); return; }
+    // client-only: accept token if it matches session id suffix - this is fuzzy and only for UX
+    const session = loadSession();
+    if(!session){ alert('No active session. Start verification again.'); return; }
+    if(entered.includes(session.sId.slice(-6))){ // weak check to allow staff to issue a code containing session suffix
+      session.verified = true;
+      session.verifiedBy = 'manual';
+      session.verifiedAt = now();
+      session.expiresAt = now() + (3*60*1000);
+      saveSession(session);
+      const encoded = b64(CONFIG.robloxEventUrl + '?s=' + session.sId);
+      setEventButtonLink(encoded);
+      setStatus('Manual verification accepted. Click JOIN.');
     } else {
-        // They have a session but didn't come from LootLabs
-        // Check if they already completed verification
-        try {
-            const session = JSON.parse(sessionData);
-            if (session.validated && Date.now() - session.validatedAt < SECURITY_CONFIG.sessionTimeout) {
-                showVerificationSuccess();
-            } else {
-                showWaitingForVerification();
-            }
-        } catch (e) {
-            redirectToBypass('Invalid session data');
-        }
+      alert('Invalid code. Contact staff in Discord.');
     }
+  });
 }
 
-function showWaitingForVerification() {
-    const title = document.getElementById('verificationTitle');
-    const spinner = document.getElementById('loadingSpinner');
-    const statusText = document.getElementById('statusText');
-    const tokenSection = document.getElementById('tokenInput');
-    const successSection = document.getElementById('successSection');
-    const errorSection = document.getElementById('errorSection');
-    
-    if (title) title.textContent = 'Waiting for Verification...';
-    if (spinner) spinner.classList.remove('hidden');
-    if (statusText) statusText.textContent = 'Complete the verification in the other tab, then return here.';
-    if (tokenSection) tokenSection.classList.add('hidden'); // Hide token input
-    if (successSection) successSection.classList.add('hidden');
-    if (errorSection) errorSection.classList.add('hidden');
-    
-    // Check every 3 seconds if they completed verification
-    let checkCount = 0;
-    const maxChecks = 60; // Check for 3 minutes max
-    
-    const checkInterval = setInterval(() => {
-        checkCount++;
-        
-        // If they've been waiting too long, send to bypass
-        if (checkCount >= maxChecks) {
-            clearInterval(checkInterval);
-            redirectToBypass('Verification timeout - please try again');
-            return;
-        }
-        
-        // Check if page was refreshed and they now have the right referrer
-        const currentReferrer = document.referrer;
-        if (currentReferrer && (currentReferrer.includes('lootdest.org') || currentReferrer.includes('lootlabs.net'))) {
-            clearInterval(checkInterval);
-            showVerificationSuccess();
-        }
-    }, 3000);
-}
+// ----------------- init -----------------
+document.addEventListener('DOMContentLoaded', ()=>{
+  // route pages by pathname
+  const path = window.location.pathname.split('/').pop();
+  // common UI init
+  const joinBtn = document.getElementById('eventButton');
+  if(joinBtn) joinBtn.addEventListener('click',(e)=>{ e.preventDefault(); openEventFromButton(); });
 
-function showVerificationSuccess() {
-    const tokenSection = document.getElementById('tokenInput');
-    const successSection = document.getElementById('successSection');
-    const errorSection = document.getElementById('errorSection');
-    const eventBtn = document.getElementById('eventButton');
-    const expiryTime = document.getElementById('expiryTime');
-    const spinner = document.getElementById('loadingSpinner');
-    const title = document.getElementById('verificationTitle');
-    
-    if (title) title.textContent = 'Verification Complete!';
-    if (spinner) spinner.classList.add('hidden');
-    if (tokenSection) tokenSection.classList.add('hidden');
-    if (errorSection) errorSection.classList.add('hidden');
-    if (successSection) successSection.classList.remove('hidden');
-    
-    if (eventBtn) {
-        eventBtn.setAttribute('data-link', SECURITY_CONFIG.robloxEventUrl);
-    }
-    
-    if (expiryTime) {
-        const expiry = new Date(Date.now() + SECURITY_CONFIG.sessionTimeout);
-        expiryTime.textContent = expiry.toISOString().replace('T', ' ').split('.')[0] + ' UTC';
-    }
-    
-    // Store successful validation
-    const sessionData = JSON.parse(localStorage.getItem('eventSession') || '{}');
-    sessionData.validated = true;
-    sessionData.validatedAt = Date.now();
-    sessionData.completedVia = 'lootlabs';
-    localStorage.setItem('eventSession', JSON.stringify(sessionData));
-    
-    // Add success animation
-    if (successSection) {
-        successSection.style.animation = 'successSlide 0.8s cubic-bezier(0.4, 0, 0.2, 1)';
-    }
-}
-
-// Bypass Page Logic
-function initializeBypassPage() {
-    const goHomeBtn = document.getElementById('goHome');
-    const contactSupportBtn = document.getElementById('contactSupport');
-    
-    if (goHomeBtn) {
-        goHomeBtn.addEventListener('click', function() {
-            this.style.transform = 'scale(0.98)';
-            setTimeout(() => {
-                localStorage.clear();
-                window.location.href = 'index.html';
-            }, 150);
-        });
-    }
-    
-    if (contactSupportBtn) {
-        contactSupportBtn.addEventListener('click', function() {
-            this.style.transform = 'scale(0.98)';
-            setTimeout(() => {
-                this.style.transform = '';
-                window.open(SECURITY_CONFIG.discordUrl, '_blank');
-            }, 150);
-        });
-    }
-    
-    updateSessionInfo();
-    
-    const bypassReason = localStorage.getItem('bypassReason');
-    if (bypassReason) {
-        localStorage.removeItem('bypassReason');
-    }
-    
-    localStorage.removeItem('eventSession');
-    animateViolations();
-}
-
-function updateSessionInfo() {
-    const timestampEl = document.getElementById('timestamp');
-    const userAgentEl = document.getElementById('userAgent');
-    const sessionIdEl = document.getElementById('sessionId');
-    const userLoginEl = document.getElementById('userLogin');
-    
-    if (timestampEl) {
-        timestampEl.textContent = '2025-08-08 11:58:26 UTC';
-    }
-    
-    if (userAgentEl) {
-        const ua = navigator.userAgent;
-        let simplified = 'Unknown Browser';
-        if (ua.includes('Chrome')) simplified = 'Chrome';
-        else if (ua.includes('Safari')) simplified = 'Safari';
-        else if (ua.includes('Firefox')) simplified = 'Firefox';
-        else if (ua.includes('Edge')) simplified = 'Edge';
-        
-        if (ua.includes('Mobile')) simplified += ' (Mobile)';
-        userAgentEl.textContent = simplified;
-    }
-    
-    if (sessionIdEl) {
-        sessionIdEl.textContent = securityState.sessionId + '-BYPASS-DETECTED';
-    }
-    
-    if (userLoginEl) {
-        userLoginEl.textContent = 'SL1YYY';
-    }
-}
-
-function animateViolations() {
-    const violations = document.querySelectorAll('.violation-list .step-card');
-    violations.forEach((violation, index) => {
-        setTimeout(() => {
-            violation.style.opacity = '1';
-            violation.style.transform = 'translateX(0)';
-        }, index * 200);
-    });
-}
-
-// Update timestamps throughout the site
-function updateTimestamps() {
-    const utcString = '2025-08-08 11:58:26 UTC';
-    
-    const timestampElements = document.querySelectorAll('[id*="timestamp"], .timestamp');
-    timestampElements.forEach(el => {
-        if (el.textContent.includes('UTC') || el.textContent.includes('2025')) {
-            el.textContent = utcString;
-        }
-    });
-}
-
-// Basic click effects only
-document.addEventListener('click', function(e) {
-    if (e.target.tagName === 'BUTTON' || e.target.closest('button')) {
-        const btn = e.target.tagName === 'BUTTON' ? e.target : e.target.closest('button');
-        btn.style.transform = 'scale(0.98)';
-        setTimeout(() => {
-            btn.style.transform = '';
-        }, 150);
-    }
-});
-
-// Modal Functions
-function showTermsModal() {
-    const modalHTML = `
-        <div class="modal-overlay" id="termsModal" style="z-index: 999999 !important;">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3 class="modal-title">📜 Terms of Service</h3>
-                    <button class="modal-close" onclick="closeModal('termsModal')">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <div class="modal-section">
-                        <h4>🎯 Acceptance of Terms</h4>
-                        <p>By using this Event Access Portal, you agree to these terms and all applicable laws.</p>
-                    </div>
-                    
-                    <div class="modal-section">
-                        <h4>🔐 Verification Process</h4>
-                        <ul>
-                            <li>Complete verification through authorized partners</li>
-                            <li>Access expires after 24 hours</li>
-                            <li>Sharing access is strictly prohibited</li>
-                            <li>Multiple failed attempts may result in restrictions</li>
-                        </ul>
-                    </div>
-                    
-                    <div class="modal-section">
-                        <h4>🚫 Prohibited Activities</h4>
-                        <ul>
-                            <li>Bypassing verification systems</li>
-                            <li>Using automated tools or bots</li>
-                            <li>Tampering with security measures</li>
-                            <li>Sharing credentials with unauthorized users</li>
-                        </ul>
-                    </div>
-                    
-                    <div class="modal-section">
-                        <h4>🎮 Event Access</h4>
-                        <ul>
-                            <li>Access granted at our discretion</li>
-                            <li>Events may be limited by time or capacity</li>
-                            <li>We reserve the right to modify events</li>
-                            <li>No guarantee of specific outcomes</li>
-                        </ul>
-                    </div>
-                    
-                    <div class="modal-section">
-                        <h4>📞 Contact</h4>
-                        <p>Questions? Contact us on <a href="https://discord.gg/dyGvnnymbHj" target="_blank">Discord</a>.</p>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button onclick="closeModal('termsModal')">Got it!</button>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    document.body.insertAdjacentHTML('beforeend', modalHTML);
-    setTimeout(() => {
-        document.getElementById('termsModal').classList.add('active');
-    }, 10);
-}
-
-function showPrivacyModal() {
-    const modalHTML = `
-        <div class="modal-overlay" id="privacyModal" style="z-index: 999999 !important;">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3 class="modal-title">🔒 Privacy Policy</h3>
-                    <button class="modal-close" onclick="closeModal('privacyModal')">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <div class="modal-section">
-                        <h4>🎯 Information We Collect</h4>
-                        <ul>
-                            <li><strong>Session Data:</strong> Temporary data to maintain verification status</li>
-                            <li><strong>Timestamps:</strong> For session expiration and abuse prevention</li>
-                            <li><strong>Browser Info:</strong> Basic technical data for security</li>
-                            <li><strong>Referrer Data:</strong> To verify completion of required steps</li>
-                        </ul>
-                    </div>
-                    
-                    <div class="modal-section">
-                        <h4>🛡️ How We Use Your Information</h4>
-                        <ul>
-                            <li>Session data ensures smooth user experience</li>
-                            <li>Timestamps prevent abuse and manage expiration</li>
-                            <li>Browser info helps detect security threats</li>
-                            <li>Referrer data verifies legitimate access</li>
-                        </ul>
-                    </div>
-                    
-                    <div class="modal-section">
-                        <h4>🔐 Data Protection</h4>
-                        <ul>
-                            <li><strong>We DO NOT collect personal information</strong></li>
-                            <li>No usernames, emails, or personal data stored</li>
-                            <li>All data is temporary and automatically deleted</li>
-                            <li>Session data is encrypted and secure</li>
-                        </ul>
-                    </div>
-                    
-                    <div class="modal-section">
-                        <h4>⏰ Data Retention</h4>
-                        <ul>
-                            <li>Session data: Deleted after 24 hours</li>
-                            <li>Security logs: Kept locally, cleared regularly</li>
-                            <li>Verification status: Single-use and immediately invalidated</li>
-                        </ul>
-                    </div>
-                    
-                    <div class="modal-section">
-                        <h4>📞 Questions?</h4>
-                        <p>Contact us on <a href="https://discord.gg/dyGvnnymbHj" target="_blank">Discord</a> for privacy concerns.</p>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button onclick="closeModal('privacyModal')">Understood!</button>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    document.body.insertAdjacentHTML('beforeend', modalHTML);
-    setTimeout(() => {
-        document.getElementById('privacyModal').classList.add('active');
-    }, 10);
-}
-
-function closeModal(modalId) {
-    const modal = document.getElementById(modalId);
-    if (modal) {
-        modal.classList.remove('active');
-        setTimeout(() => {
-            modal.remove();
-        }, 300);
-    }
-}
-
-// Fix terms and privacy links
-document.addEventListener('DOMContentLoaded', function() {
-    setTimeout(() => {
-        const links = document.querySelectorAll('a[href="#"]');
-        links.forEach(link => {
-            const text = link.textContent.toLowerCase();
-            if (text.includes('terms')) {
-                link.onclick = function(e) {
-                    e.preventDefault();
-                    showTermsModal();
-                    return false;
-                };
-            } else if (text.includes('privacy')) {
-                link.onclick = function(e) {
-                    e.preventDefault();
-                    showPrivacyModal();
-                    return false;
-                };
-            }
-        });
-    }, 500);
+  if(path === '' || path === 'index.html') initIndexPage();
+  else if(path === 'redirect.html') { initRedirectPage(); initManualTokenSubmit(); }
+  else if(path === 'bypass.html') initBypassPage();
 });
